@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SmartShield | IDS/IPS Security Dashboard</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+<div class="sidebar">
+  <div class="brand"><span class="shield">🛡️</span><div><b>SmartShield</b><small>IDS / IPS</small></div></div>
+  <nav>
+    <a class="active">▣ Dashboard</a>
+    <a>◉ Live Threats</a>
+    <a>◈ Traffic Analysis</a>
+    <a>⚙ Response Engine</a>
+    <a>▤ Event Logs</a>
+  </nav>
+  <div class="system">
+    <span class="dot"></span>
+    <div><b>Protection Active</b><small>Monitoring network</small></div>
+  </div>
+</div>
+
+<main>
+<header>
+  <div>
+    <p class="eyebrow">SECURITY OPERATIONS CENTER</p>
+    <h1>Network Security Dashboard</h1>
+    <p class="sub">Real-time intrusion detection, prevention and automated threat response.</p>
+  </div>
+  <div class="live"><span class="pulse"></span> LIVE MONITORING</div>
+</header>
+
+<section class="cards">
+  <div class="card critical"><div class="icon">⚠</div><div><span>Critical Attacks</span><strong id="critical">0</strong><small>Detected threats</small></div></div>
+  <div class="card suspicious"><div class="icon">◉</div><div><span>Suspicious Traffic</span><strong id="suspicious">0</strong><small>Requires attention</small></div></div>
+  <div class="card normal"><div class="icon">✓</div><div><span>Normal Traffic</span><strong id="normal">0</strong><small>Allowed connections</small></div></div>
+  <div class="card blocked"><div class="icon">⛔</div><div><span>Blocked</span><strong id="blocked">0</strong><small>Automated response</small></div></div>
+</section>
+
+<section class="grid">
+  <div class="panel chart-panel">
+    <div class="panel-title"><div><h2>Attack Categories</h2><p>Detected activity by category</p></div></div>
+    <canvas id="categoryChart"></canvas>
+  </div>
+  <div class="panel chart-panel">
+    <div class="panel-title"><div><h2>Traffic Protocols</h2><p>Protocol distribution</p></div></div>
+    <canvas id="protocolChart"></canvas>
+  </div>
+</section>
+
+<section class="panel">
+  <div class="panel-title">
+    <div><h2>Real-Time Threat Monitor</h2><p>Latest network events and automated actions</p></div>
+    <div class="actions"><button onclick="injectThreat()">+ Simulate Threat</button><button class="danger" onclick="clearEvents()">Clear</button></div>
+  </div>
+  <div class="table-wrap">
+  <table>
+    <thead><tr><th>TIME</th><th>SOURCE IP</th><th>DESTINATION IP</th><th>PROTOCOL</th><th>ATTACK CATEGORY</th><th>SEVERITY</th><th>ACTION TAKEN</th></tr></thead>
+    <tbody id="eventTable"></tbody>
+  </table>
+  </div>
+</section>
+
+<section class="bottom-grid">
+  <div class="panel response">
+    <div class="panel-title"><div><h2>Automated Threat Response</h2><p>Decision engine status</p></div><span class="status">ACTIVE</span></div>
+    <div class="flow">
+      <div>📡<b>Traffic</b><small>Network event</small></div><i>→</i>
+      <div>🔎<b>IDS Engine</b><small>Analyze</small></div><i>→</i>
+      <div>🧠<b>Risk Engine</b><small>Classify</small></div><i>→</i>
+      <div>🛡️<b>Response</b><small>Allow / Alert / Block</small></div>
+    </div>
+  </div>
+  <div class="panel">
+    <div class="panel-title"><div><h2>Action Summary</h2><p>Current response distribution</p></div></div>
+    <canvas id="actionChart"></canvas>
+  </div>
+</section>
+
+<footer>SmartShield • Real-Time IDS/IPS • Hackathon Demo</footer>
+</main>
+
+<script>
+let categoryChart, protocolChart, actionChart;
+
+const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+function badge(value, type) {
+  return `<span class="${type}">${esc(value)}</span>`;
+}
+
+async function loadEvents() {
+  const res = await fetch('/api/events?limit=80');
+  const events = await res.json();
+  document.getElementById('eventTable').innerHTML = events.map(e => `
+    <tr>
+      <td>${esc(e.timestamp.split(' ')[1])}</td>
+      <td class="ip">${esc(e.source_ip)}</td>
+      <td class="ip">${esc(e.destination_ip)}</td>
+      <td>${esc(e.protocol)}</td>
+      <td>${esc(e.attack_category)}</td>
+      <td>${badge(e.severity, 'sev-' + e.severity.toLowerCase())}</td>
+      <td>${badge(e.action, 'action-' + e.action.toLowerCase())}</td>
+    </tr>`).join('');
+}
+
+function makeChart(id, type, labels, values) {
+  const ctx = document.getElementById(id).getContext('2d');
+  const old = id === 'categoryChart' ? categoryChart : id === 'protocolChart' ? protocolChart : actionChart;
+  if (old) old.destroy();
+  const chart = new Chart(ctx, {
+    type,
+    data: { labels, datasets: [{ data: values, borderWidth: 1 }] },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: { legend: { display: type === 'doughnut', position: 'bottom' } },
+      scales: type === 'bar' ? { y: { beginAtZero: true, ticks: { precision: 0 } } } : {}
+    }
+  });
+  if (id === 'categoryChart') categoryChart = chart;
+  else if (id === 'protocolChart') protocolChart = chart;
+  else actionChart = chart;
+}
+
+async function loadStats() {
+  const res = await fetch('/api/stats');
+  const s = await res.json();
+  document.getElementById('critical').textContent = s.critical;
+  document.getElementById('suspicious').textContent = s.suspicious;
+  document.getElementById('normal').textContent = s.normal;
+  document.getElementById('blocked').textContent = s.blocked;
+
+  makeChart('categoryChart','bar',s.categories.map(x=>x.name),s.categories.map(x=>x.value));
+  makeChart('protocolChart','doughnut',s.protocols.map(x=>x.name),s.protocols.map(x=>x.value));
+  makeChart('actionChart','doughnut',s.actions.map(x=>x.name),s.actions.map(x=>x.value));
+}
+
+async function refresh() {
+  await Promise.all([loadEvents(), loadStats()]);
+}
+async function injectThreat() {
+  const attacks = [
+    ['192.168.1.99','10.0.0.10','TCP','Port Scan','Critical'],
+    ['172.16.2.44','10.0.0.20','TCP','Brute Force','High'],
+    ['10.0.0.88','10.0.0.30','HTTP','SQL Injection','Critical'],
+    ['192.168.1.72','10.0.0.15','UDP','DoS Attempt','Critical'],
+    ['10.0.0.55','10.0.0.50','HTTP','Suspicious Traffic','Medium']
+  ];
+  const a = attacks[Math.floor(Math.random()*attacks.length)];
+  await fetch('/api/event', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({source_ip:a[0],destination_ip:a[1],protocol:a[2],attack_category:a[3],severity:a[4]})
+  });
+  refresh();
+}
+async function clearEvents() {
+  if (!confirm('Clear all security events?')) return;
+  await fetch('/api/clear',{method:'POST'});
+  refresh();
+}
+refresh();
+setInterval(refresh, 4000);
+</script>
+</body>
+</html>
